@@ -1,5 +1,6 @@
 import { rulesExtended } from "discord-markdown-parser";
 import type { Guild, Message } from "discord.js";
+import moment from "moment";
 import SimpleMarkdown from "simple-markdown";
 import type { SingleASTNode, ASTNode, Capture } from "simple-markdown";
 
@@ -125,6 +126,8 @@ function text(ast: ASTNode, guild: Guild | null): string {
       if (!Number.isInteger(date) || Math.abs(date) > 8640000000000000)
         return " 不明な日付 ";
 
+      if (ast.format === "R") return formatRelative(date);
+
       const full = dateSegments(date);
       const now = dateSegments(Date.now());
       // read only different segments from now
@@ -198,6 +201,14 @@ const twemojiParser = SimpleMarkdown.parserFor(
 function cleanTwemojis(s: string) {
   const ast = twemojiParser(s);
   return text(ast, null); // should be only twemoji and text, so no problem with null
+}
+
+function formatRelative(date: number | Date): string {
+  moment.relativeTimeThreshold("ss", -1);
+  moment.relativeTimeThreshold("s", 60);
+  moment.relativeTimeThreshold("m", 60);
+  moment.locale("ja-JP");
+  return moment(date).fromNow();
 }
 
 function dateSegments(date: number | Date) {
