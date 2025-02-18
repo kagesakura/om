@@ -16,6 +16,34 @@ const parser = SimpleMarkdown.parserFor(
         type: "command",
       }),
     },
+    channelOrMessageLink: {
+      order: rulesExtended.url.order - 0.5,
+      match: (source: string) => {
+        const matched =
+          /^https:\/\/(?:(?:canary\.|ptb\.)?discord(?:app)?.com|staging\.discord\.co)\/channels\/(\d+|@me)(?:\/(\d+|[a-zA-Z-]+))?(?:\/(\d+|[a-zA-Z-]+))?/.exec(
+            source,
+          );
+        if (matched?.[2]?.match(/\D/) || matched?.[3]?.match(/\D/)) return null;
+        return matched;
+      },
+      parse: (capture: Capture) => ({
+        guildIdOrMe: capture[1],
+        channelId: capture[2],
+        messageId: capture[3],
+        type: "channelOrMessageLink",
+      }),
+    },
+    attachmentLink: {
+      order: rulesExtended.url.order - 0.5,
+      match: (source: string) =>
+        /^https:\/\/(?:(?:media|images)\.discordapp\.net|cdn\.discordapp\.com)\/(?:attachments|ephemeral-attachments)\/\d+\/\d+\/([\w.-]*[\w-])(?:\?[\w?&=-]*)?/.exec(
+          source,
+        ),
+      parse: (capture: Capture) => ({
+        filename: capture[1],
+        type: "attachmentLink",
+      }),
+    },
   },
   { inline: true },
 );
@@ -50,28 +78,7 @@ function text(ast: ASTNode, guild: Guild | null): string {
     case "inlineCode":
       return stringOrEmpty(ast.content);
 
-    case "url": {
-      const url = stringOrEmpty(ast.target);
-      const discordUrl = parseDiscordUrl(url);
-      if (!discordUrl) return " URL省略 ";
-      if (guild?.id !== discordUrl.guildId) {
-        return ` 外部サーバーの${
-          discordUrl.messageId ? "メッセージ" : "チャンネル"
-        } `;
-      }
-
-      const channel = guild.channels.cache.get(discordUrl.channelId);
-      if (!channel) {
-        return ` 不明な${discordUrl.messageId ? "メッセージ" : "チャンネル"} `;
-      }
-
-      const name = cleanTwemojis(channel.name);
-      if (discordUrl.messageId) {
-        return `${name}のメッセージ`;
-      } else {
-        return name;
-      }
-    }
+    case "url":
     case "autolink":
       return " URL省略 ";
 
@@ -134,6 +141,31 @@ function text(ast: ASTNode, guild: Guild | null): string {
 
       return "今";
     }
+
+    case "attachmentLink":
+      return stringOrEmpty(ast.filename);
+
+    case "channelOrMessageLink": {
+      if (!ast.channelId) {
+        return " URL省略 ";
+      }
+
+      if (guild?.id !== stringOrEmpty(ast.guildIdOrMe)) {
+        return ` 外部サーバーの${ast.messageId ? "メッセージ" : "チャンネル"} `;
+      }
+
+      const channel = guild.channels.cache.get(stringOrEmpty(ast.channelId));
+      if (!channel) {
+        return ` 不明な${ast.messageId ? "メッセージ" : "チャンネル"} `;
+      }
+
+      const name = cleanTwemojis(channel.name);
+      if (ast.messageId) {
+        return `${name}のメッセージ`;
+      } else {
+        return name;
+      }
+    }
   }
 
   return "";
@@ -158,36 +190,6 @@ function isSingleASTNode(ast: unknown): ast is SingleASTNode {
 
 function stringOrEmpty(str: unknown): string {
   return typeof str === "string" ? str : "";
-}
-
-interface DiscordUrl {
-  guildId: string;
-  channelId: string;
-  messageId?: string | undefined;
-}
-
-function parseDiscordUrl(url: string): DiscordUrl | undefined {
-  try {
-    const { protocol, host, pathname } = new URL(url);
-    if (protocol !== "https:") return;
-    if (
-      ![
-        "discord.com",
-        "ptb.discord.com",
-        "canary.discord.com",
-        "discordapp.com",
-        "ptb.discordapp.com",
-        "canary.discordapp.com",
-      ].includes(host)
-    )
-      return;
-
-    const [, channels, guildId, channelId, messageId] = pathname.split("/");
-    if (channels !== "channels" || !guildId || !channelId) return;
-
-    return { guildId, channelId, messageId };
-    // eslint-disable-next-line no-empty
-  } catch {}
 }
 
 const twemojiParser = SimpleMarkdown.parserFor(
