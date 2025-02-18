@@ -44,6 +44,20 @@ const parser = SimpleMarkdown.parserFor(
         type: "attachmentLink",
       }),
     },
+    mediaPostLink: {
+      order: rulesExtended.url.order - 0.5,
+      match: (source: string) =>
+        /^https:\/\/(?:(?:canary\.|ptb\.)?discord(?:app)?.com|staging\.discord\.co)\/channels\/(\d+)\/(\d+)\/threads\/(\d+)\/(\d+)/.exec(
+          source,
+        ),
+      parse: (capture: Capture) => ({
+        guildId: capture[1],
+        channelId: capture[2],
+        threadId: capture[3],
+        messageId: capture[4],
+        type: "mediaPostLink",
+      }),
+    },
   },
   { inline: true },
 );
@@ -144,6 +158,9 @@ function text(ast: ASTNode, guild: Guild | null): string {
 
     case "attachmentLink":
       return stringOrEmpty(ast.filename);
+
+    case "mediaPostLink":
+      return " メディアポスト ";
 
     case "channelOrMessageLink": {
       if (!ast.channelId) {
